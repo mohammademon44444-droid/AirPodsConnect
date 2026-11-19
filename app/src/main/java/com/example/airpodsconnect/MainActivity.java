@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.media.audiofx.Equalizer;
 import android.os.*;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -32,6 +33,12 @@ public class MainActivity extends Activity {
     private LinearLayout devices,paired;
     private TextView status,battery,connectionHint,leftValue,rightValue,caseValue;
     private Button scanButton;
+    private Equalizer equalizer;
+    private TextView eqStatus;
+    private Button eqToggle;
+    private LinearLayout eqBands;
+    private Spinner eqPresets;
+    private boolean eqAvailable=false;
     private int bg=Color.rgb(9,15,31), panel=Color.rgb(20,29,51), muted=Color.rgb(151,165,190), blue=Color.rgb(73,145,255);
     private final BroadcastReceiver btReceiver=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
@@ -110,6 +117,26 @@ public class MainActivity extends Activity {
         LinearLayout info=column();info.addView(text("Standard Bluetooth battery",12,muted,false));
         battery=text("Not received",20,Color.WHITE,true);info.addView(battery);
         single.addView(info,new LinearLayout.LayoutParams(0,-2,1));single.addView(text("BLE  •  0x180F",9,blue,true));root.addView(single);gap(root,18);
+
+        LinearLayout eqCard=card();eqCard.addView(text("AUDIO EQUALIZER",13,Color.WHITE,true));gap(eqCard,6);
+        eqStatus=text("Checking audio effects…",11,muted,false);eqCard.addView(eqStatus);gap(eqCard,8);
+        eqPresets=new Spinner(this);
+        String[] presetOptions={"Balanced","Bass Boost","Pop","Rock","Vocal","Classical"};
+        ArrayAdapter<String> presetAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,presetOptions);
+        presetAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        eqPresets.setAdapter(presetAdapter);eqCard.addView(eqPresets,lp(-1,48));
+        eqPresets.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            boolean first=true;
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){
+                if(first){first=false;return;}applyEqPreset(position);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
+        eqToggle=new Button(this);eqToggle.setText("Enable Equalizer");eqToggle.setAllCaps(false);eqToggle.setTextColor(Color.WHITE);eqToggle.setBackground(shape(blue,14));
+        eqToggle.setOnClickListener(v->toggleEqualizer());eqCard.addView(eqToggle,lp(-1,48));gap(eqCard,8);
+        eqBands=column();eqCard.addView(eqBands);
+        root.addView(eqCard);gap(root,18);
+        initEqualizer();
 
         LinearLayout buttons=new LinearLayout(this);buttons.setOrientation(LinearLayout.HORIZONTAL);
         scanButton=new Button(this);scanButton.setText("Scan nearby");scanButton.setAllCaps(false);scanButton.setTextColor(Color.WHITE);scanButton.setBackground(shape(blue,15));scanButton.setOnClickListener(v->startScan());
@@ -235,6 +262,81 @@ public class MainActivity extends Activity {
             if(BL.equals(ch.getUuid())&&s==BluetoothGatt.GATT_SUCCESS&&v!=null&&v.length>0)showBattery(v[0]&255);
         }
     };
+    private void initEqualizer(){
+        try{
+            equalizer=new Equalizer(0,0);
+            equalizer.setEnabled(false);
+            eqAvailable=true;
+            eqStatus.setText("Ready • works only if your phone supports global audio effects");
+            buildEqBands();
+        }catch(Throwable e){
+            eqAvailable=false;
+            eqStatus.setText("এই ফোনে system-wide Equalizer সমর্থিত নয়");
+            eqToggle.setEnabled(false);eqToggle.setText("Equalizer unavailable");
+        }
+    }
+    private void buildEqBands(){
+        if(!eqAvailable||eqBands==null)return;
+        eqBands.removeAllViews();
+        try{
+            short count=equalizer.getNumberOfBands();
+            short[] range=equalizer.getBandLevelRange();
+            for(short b=0;b<count;b++){
+                final short band=b;
+                int center=equalizer.getCenterFreq(band)/1000;
+                TextView label=text(center>=1000?(center/1000)+" kHz":center+" Hz",11,Color.WHITE,true);
+                eqBands.addView(label);
+                SeekBar seek=new SeekBar(this);
+                seek.setMax(range[1]-range[0]);
+                seek.setProgress(equalizer.getBandLevel(band)-range[0]);
+                seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+                    @Override public void onProgressChanged(SeekBar s,int p,boolean user){
+                        if(user&&eqAvailable)try{equalizer.setBandLevel(band,(short)(p+range[0]));}catch(Exception ignored){}
+                    }
+                    @Override public void onStartTrackingTouch(SeekBar s){}
+                    @Override public void onStopTrackingTouch(SeekBar s){}
+                });
+                eqBands.addView(seek,lp(-1,38));
+            }
+        }catch(Exception e){eqStatus.setText("Equalizer bands unavailable on this phone");}
+    }
+    private void toggleEqualizer(){
+        if(!eqAvailable)return;
+        try{
+            boolean enabled=!equalizer.getEnabled();
+            equalizer.setEnabled(enabled);
+            eqToggle.setText(enabled?"Disable Equalizer":"Enable Equalizer");
+            eqStatus.setText(enabled?"Equalizer enabled • Bluetooth effect depends on phone support":"Equalizer is off");
+        }catch(Exception e){eqStatus.setText("Could not change Equalizer state");}
+    }
+    private void applyEqPreset(int preset){
+        if(!eqAvailable)return;
+        try{
+            String wanted=new String[]{"balanced","bass","pop","rock","vocal","classical"}[preset];
+            short total=equalizer.getNumberOfPresets();boolean applied=false;
+            for(short i=0;i<total;i++){
+                String n=equalizer.getPresetName(i).toLowerCase(Locale.ROOT);
+                if((preset==0&&(n.contains("normal")||n.contains("flat")))||
+                   (preset==1&&n.contains("bass"))||(preset==2&&n.contains("pop"))||
+                   (preset==3&&n.contains("rock"))||(preset==4&&(n.contains("vocal")||n.contains("voice")))||
+                   (preset==5&&n.contains("classical"))){
+                    equalizer.usePreset(i);applied=true;break;
+                }
+            }
+            if(!applied){
+                short count=equalizer.getNumberOfBands();
+                short[] range=equalizer.getBandLevelRange();
+                int[][] curves={{0,0,0,0,0},{900,650,100,0,150},{250,500,650,250,350},{700,350,-100,450,700},{-250,-100,300,650,500},{250,100,-200,250,500}};
+                for(short b=0;b<count;b++){
+                    int v=curves[preset][Math.min(b,4)];
+                    v=Math.max(range[0],Math.min(range[1],v));
+                    equalizer.setBandLevel(b,(short)v);
+                }
+            }
+            buildEqBands();
+            eqStatus.setText("Preset applied: "+new String[]{"Balanced","Bass Boost","Pop","Rock","Vocal","Classical"}[preset]);
+        }catch(Exception e){eqStatus.setText("Preset not supported by this phone");}
+    }
     private void showBattery(int value){
         runOnUiThread(()->{
             battery.setText(value+"%");
@@ -254,6 +356,6 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         super.onDestroy();
-        try{if(scanner!=null&&permitted())scanner.stopScan(callback);if(activeGatt!=null)activeGatt.close();if(adapter!=null){if(a2dp!=null)adapter.closeProfileProxy(BluetoothProfile.A2DP,a2dp);if(headset!=null)adapter.closeProfileProxy(BluetoothProfile.HEADSET,headset);}}catch(Exception ignored){}
+        try{if(equalizer!=null)equalizer.release();if(scanner!=null&&permitted())scanner.stopScan(callback);if(activeGatt!=null)activeGatt.close();if(adapter!=null){if(a2dp!=null)adapter.closeProfileProxy(BluetoothProfile.A2DP,a2dp);if(headset!=null)adapter.closeProfileProxy(BluetoothProfile.HEADSET,headset);}}catch(Exception ignored){}
     }
 }
