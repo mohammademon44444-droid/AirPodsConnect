@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Set<String> seen=new HashSet<>();
     private LinearLayout devices,paired;
-    private TextView status,battery,connectionHint;
+    private TextView status,battery,connectionHint,leftValue,rightValue,caseValue;
     private Button scanButton;
     private int bg=Color.rgb(9,15,31), panel=Color.rgb(20,29,51), muted=Color.rgb(151,165,190), blue=Color.rgb(73,145,255);
     private final BroadcastReceiver btReceiver=new BroadcastReceiver(){
@@ -100,11 +100,11 @@ public class MainActivity extends Activity {
         row.addView(text("BATTERY STATUS",13,Color.WHITE,true),new LinearLayout.LayoutParams(0,-2,1));
         row.addView(text("LIVE • WHEN SUPPORTED",9,muted,true));root.addView(row);gap(root,10);
         LinearLayout cards=new LinearLayout(this);cards.setOrientation(LinearLayout.HORIZONTAL);
-        cards.addView(batteryCard("LEFT","L"),new LinearLayout.LayoutParams(0,dp(105),1));
+        cards.addView(batteryCard("LEFT","L",0),new LinearLayout.LayoutParams(0,dp(105),1));
         View s1=new View(this);cards.addView(s1,lp(8,1));
-        cards.addView(batteryCard("RIGHT","R"),new LinearLayout.LayoutParams(0,dp(105),1));
+        cards.addView(batteryCard("RIGHT","R",1),new LinearLayout.LayoutParams(0,dp(105),1));
         View s2=new View(this);cards.addView(s2,lp(8,1));
-        cards.addView(batteryCard("CASE","▣"),new LinearLayout.LayoutParams(0,dp(105),1));
+        cards.addView(batteryCard("CASE","▣",2),new LinearLayout.LayoutParams(0,dp(105),1));
         root.addView(cards);gap(root,10);
         LinearLayout single=card();single.setOrientation(LinearLayout.HORIZONTAL);single.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout info=column();info.addView(text("Standard Bluetooth battery",12,muted,false));
@@ -119,7 +119,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams sp=lp(0,52);sp.width=0;sp.weight=1;sp.leftMargin=dp(8);buttons.addView(settings,sp);root.addView(buttons);gap(root,20);
         root.addView(text("PAIRED DEVICES",13,Color.WHITE,true));gap(root,8);paired=column();root.addView(paired);gap(root,16);
         root.addView(text("NEARBY BLE DEVICES",13,Color.WHITE,true));gap(root,8);devices=column();root.addView(devices);
-        TextView note=text("নোট: Android-এর সাধারণ Bluetooth API দিয়ে paired AirPods-এর কানেকশন দেখা যায়; সরাসরি জোর করে A2DP connect করানো যায় না। আলাদা Left / Right / Case চার্জ এবং কেসের charging status কেবল earbuds-এর Bluetooth প্রোটোকল দিলে পাওয়া যাবে।",11,muted,false);
+        TextView note=text("নোট: আলাদা Left / Right / Case চার্জ এবং কেসের charging status এই earbuds-এর Bluetooth protocol সমর্থন না করলে Android-এ পাওয়া যাবে না। অ্যাপ কোনো ভুয়া শতাংশ দেখাবে না। অটো কানেকশন Android-এর Bluetooth system নিয়ন্ত্রণ করে।",11,muted,false);
         note.setPadding(dp(2),dp(14),dp(2),0);root.addView(note);
         setContentView(scroll);
     }
@@ -232,9 +232,9 @@ public class MainActivity extends Activity {
             if(BL.equals(ch.getUuid())&&s==BluetoothGatt.GATT_SUCCESS&&v!=null&&v.length>0)showBattery(v[0]&255);
         }
     };
-    private void showBattery(int value){runOnUiThread(()->{battery.setText(value+"%");status.setText("BLE battery received");});}
+    private void showBattery(int value){runOnUiThread(()->{battery.setText(value+"%");status.setText("BLE battery received");connectionHint.setText("One battery value received from device");});}\n    private void showConnectionPopup(String name){\n        if(isFinishing()||isDestroyed())return;\n        new android.app.AlertDialog.Builder(this).setTitle("AirPods connected").setMessage(name+"\\n\\nBluetooth audio connection detected. Battery details will appear when the earbuds provide them.").setPositiveButton("OK",(d,w)->d.dismiss()).show();\n    }
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){
-        super.onRequestPermissionsResult(r,p,g);if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(Build.VERSION.SDK_INT>=31&&adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
+        super.onRequestPermissionsResult(r,p,g);if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
     }
     @Override protected void onDestroy(){
         super.onDestroy();
