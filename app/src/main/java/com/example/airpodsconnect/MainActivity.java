@@ -125,6 +125,7 @@ public class MainActivity extends Activity {
             if (!seen.add(address)) return;
             String name=d.getName();
             if (name==null || name.trim().isEmpty()) name="Unknown Bluetooth device";
+            final String deviceName = name;
             Button item=new Button(this); item.setAllCaps(false);
             item.setGravity(Gravity.CENTER_VERTICAL);
             item.setText(name+"  •  "+rssi+" dBm\n"+address);
