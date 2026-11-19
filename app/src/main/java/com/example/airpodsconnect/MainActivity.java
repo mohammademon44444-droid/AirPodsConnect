@@ -123,8 +123,11 @@ public class MainActivity extends Activity {
         note.setPadding(dp(2),dp(14),dp(2),0);root.addView(note);
         setContentView(scroll);
     }
-    private LinearLayout batteryCard(String label,String icon){
-        LinearLayout c=card();c.setGravity(Gravity.CENTER);c.addView(text(icon,22,blue,true));gap(c,5);c.addView(text("—",19,Color.WHITE,true));c.addView(text(label,10,muted,true));return c;
+    private LinearLayout batteryCard(String label,String icon,int which){
+        LinearLayout c=card();c.setGravity(Gravity.CENTER);c.addView(text(icon,22,blue,true));gap(c,5);
+        TextView value=text("—",19,Color.WHITE,true);
+        if(which==0)leftValue=value;else if(which==1)rightValue=value;else caseValue=value;
+        c.addView(value);c.addView(text(label,10,muted,true));return c;
     }
     private boolean permitted(){
         if(Build.VERSION.SDK_INT>=31)return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==0&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==0;
@@ -232,7 +235,20 @@ public class MainActivity extends Activity {
             if(BL.equals(ch.getUuid())&&s==BluetoothGatt.GATT_SUCCESS&&v!=null&&v.length>0)showBattery(v[0]&255);
         }
     };
-    private void showBattery(int value){runOnUiThread(()->{battery.setText(value+"%");status.setText("BLE battery received");connectionHint.setText("One battery value received from device");});}\n    private void showConnectionPopup(String name){\n        if(isFinishing()||isDestroyed())return;\n        new android.app.AlertDialog.Builder(this).setTitle("AirPods connected").setMessage(name+"\\n\\nBluetooth audio connection detected. Battery details will appear when the earbuds provide them.").setPositiveButton("OK",(d,w)->d.dismiss()).show();\n    }
+    private void showBattery(int value){
+        runOnUiThread(()->{
+            battery.setText(value+"%");
+            status.setText("BLE battery received");
+            connectionHint.setText("One battery value received from device");
+        });
+    }
+    private void showConnectionPopup(String name){
+        if(isFinishing()||isDestroyed())return;
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("AirPods connected")
+            .setMessage(name+"\\n\\nBluetooth audio connection detected. Battery details will appear when the earbuds provide them.")
+            .setPositiveButton("OK",(d,w)->d.dismiss()).show();
+    }
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){
         super.onRequestPermissionsResult(r,p,g);if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
     }
