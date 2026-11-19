@@ -10,6 +10,10 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.media.audiofx.Equalizer;
+import android.speech.tts.TextToSpeech;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.os.*;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -39,6 +43,10 @@ public class MainActivity extends Activity {
     private LinearLayout eqBands;
     private Spinner eqPresets;
     private boolean eqAvailable=false;
+    private android.content.SharedPreferences prefs;
+    private TextToSpeech tts;
+    private boolean ttsReady=false;
+    private boolean popupEnabled=true, dynamicPopup=false, voiceEnabled=false, lowBatteryEnabled=false, autoAudioEnabled=false, quickNotificationEnabled=false;
     private int bg=Color.rgb(9,15,31), panel=Color.rgb(20,29,51), muted=Color.rgb(151,165,190), blue=Color.rgb(73,145,255);
     private final BroadcastReceiver btReceiver=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
@@ -78,6 +86,9 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);
+        prefs=getSharedPreferences("airpods_settings",MODE_PRIVATE);
+        popupEnabled=prefs.getBoolean("popup",true); dynamicPopup=prefs.getBoolean("dynamic_popup",false); voiceEnabled=prefs.getBoolean("voice",false); lowBatteryEnabled=prefs.getBoolean("low_battery",false); autoAudioEnabled=prefs.getBoolean("auto_audio",false); quickNotificationEnabled=prefs.getBoolean("quick_notification",false);
+        tts=new TextToSpeech(this,statusCode->{if(statusCode==TextToSpeech.SUCCESS){ttsReady=true;tts.setLanguage(Locale.getDefault());}});
         makeUi();
         BluetoothManager m=(BluetoothManager)getSystemService(Context.BLUETOOTH_SERVICE);
         adapter=m==null?null:m.getAdapter();
@@ -136,6 +147,7 @@ public class MainActivity extends Activity {
         eqToggle.setOnClickListener(v->toggleEqualizer());eqCard.addView(eqToggle,lp(-1,48));gap(eqCard,8);
         eqBands=column();eqCard.addView(eqBands);
         root.addView(eqCard);gap(root,18);
+        addExtraFeatures(root);
         initEqualizer();
 
         LinearLayout buttons=new LinearLayout(this);buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -149,6 +161,65 @@ public class MainActivity extends Activity {
         TextView note=text("নোট: আলাদা Left / Right / Case চার্জ এবং কেসের charging status এই earbuds-এর Bluetooth protocol সমর্থন না করলে Android-এ পাওয়া যাবে না। অ্যাপ কোনো ভুয়া শতাংশ দেখাবে না। অটো কানেকশন Android-এর Bluetooth system নিয়ন্ত্রণ করে।",11,muted,false);
         note.setPadding(dp(2),dp(14),dp(2),0);root.addView(note);
         setContentView(scroll);
+    }
+    private void savePref(String key,boolean value){prefs.edit().putBoolean(key,value).apply();}
+    private LinearLayout featureCard(String icon,String title,String subtitle,Runnable action){
+        LinearLayout c=card();c.setGravity(Gravity.CENTER_VERTICAL);
+        c.addView(text(icon,24,blue,true));gap(c,7);
+        c.addView(text(title,14,Color.WHITE,true));c.addView(text(subtitle,10,muted,false));
+        c.setOnClickListener(v->action.run());return c;
+    }
+    private void addExtraFeatures(LinearLayout root){
+        root.addView(text("MORE FEATURES",13,Color.WHITE,true));gap(root,10);
+        addFeatureRow(root,"⚙","Pop-up Settings","Connection popup",()->showPopupSettings(),"▤","Sound Settings","Equalizer controls",()->new android.app.AlertDialog.Builder(this).setTitle("Sound Settings").setMessage("Equalizer presets and band controls are available in the Audio Equalizer section above. Bluetooth audio effect support depends on your phone.").setPositiveButton("OK",null).show());
+        addFeatureRow(root,"☝","Gesture Settings","Earbud touch controls",()->showGestureInfo(),"◖","Voice Broadcast","Connection & low battery",()->showVoiceSettings());
+        addFeatureRow(root,"◉","Auto Audio Ctrl","Connection monitoring",()->toggleAutoAudio(),"▦","Battery Widget","Battery at a glance",()->showBatteryWidget());
+        addFeatureRow(root,"♧","Quick Notification","Live connection status",()->toggleQuickNotification(),"▣","Permission Settings","App permissions",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getPackageName()))));
+    }
+    private void addFeatureRow(LinearLayout root,String i1,String t1,String d1,Runnable a1,String i2,String t2,String d2,Runnable a2){
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout c1=featureCard(i1,t1,d1,a1),c2=featureCard(i2,t2,d2,a2);
+        row.addView(c1,new LinearLayout.LayoutParams(0,dp(116),1));
+        View spacer=new View(this);row.addView(spacer,lp(10,1));
+        row.addView(c2,new LinearLayout.LayoutParams(0,dp(116),1));
+        root.addView(row);gap(root,10);
+    }
+    private void showPopupSettings(){
+        LinearLayout box=column();box.setPadding(dp(18),dp(8),dp(18),0);
+        CheckBox popup=new CheckBox(this);popup.setText("Show popup when AirPods connect");popup.setTextColor(Color.WHITE);popup.setChecked(popupEnabled);box.addView(popup);
+        CheckBox dynamic=new CheckBox(this);dynamic.setText("Dynamic popup style");dynamic.setTextColor(Color.WHITE);dynamic.setChecked(dynamicPopup);box.addView(dynamic);
+        new android.app.AlertDialog.Builder(this).setTitle("Pop-up Settings").setView(box).setPositiveButton("Save",(d,w)->{popupEnabled=popup.isChecked();dynamicPopup=dynamic.isChecked();savePref("popup",popupEnabled);savePref("dynamic_popup",dynamicPopup);Toast.makeText(this,"Popup settings saved",Toast.LENGTH_SHORT).show();}).setNegativeButton("Cancel",null).show();
+    }
+    private void showGestureInfo(){
+        new android.app.AlertDialog.Builder(this).setTitle("Gesture Settings").setMessage("Single, double and triple press controls are managed by the earbuds firmware. Standard Android Bluetooth does not allow this app to reprogram generic AirPods touch gestures.").setPositiveButton("OK",null).show();
+    }
+    private void showVoiceSettings(){
+        LinearLayout box=column();box.setPadding(dp(18),dp(8),dp(18),0);
+        CheckBox voice=new CheckBox(this);voice.setText("Announce when earbuds connect");voice.setTextColor(Color.WHITE);voice.setChecked(voiceEnabled);box.addView(voice);
+        CheckBox low=new CheckBox(this);low.setText("Low battery voice alert (20% or below)");low.setTextColor(Color.WHITE);low.setChecked(lowBatteryEnabled);box.addView(low);
+        new android.app.AlertDialog.Builder(this).setTitle("Voice Broadcast").setView(box).setPositiveButton("Save",(d,w)->{voiceEnabled=voice.isChecked();lowBatteryEnabled=low.isChecked();savePref("voice",voiceEnabled);savePref("low_battery",lowBatteryEnabled);if(voiceEnabled)speak("Voice broadcast enabled");}).setNegativeButton("Cancel",null).show();
+    }
+    private void speak(String message){if(ttsReady&&voiceEnabled)try{tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,"airpods_voice");}catch(Exception ignored){}}
+    private void toggleAutoAudio(){
+        autoAudioEnabled=!autoAudioEnabled;savePref("auto_audio",autoAudioEnabled);
+        new android.app.AlertDialog.Builder(this).setTitle("Auto Audio Control").setMessage(autoAudioEnabled?"Connection monitoring is enabled. Android still controls Bluetooth audio routing; this app cannot force-connect A2DP on standard Android.":"Connection monitoring is disabled.").setPositiveButton("OK",null).show();
+    }
+    private void showBatteryWidget(){
+        new android.app.AlertDialog.Builder(this).setTitle("Battery Widget").setMessage("Phone: "+battery.getText()+"\nLeft earbud: "+leftValue.getText()+"\nRight earbud: "+rightValue.getText()+"\nCharging case: "+caseValue.getText()+"\n\nSeparate battery readings appear only when the earbuds expose them.").setPositiveButton("OK",null).show();
+    }
+    private void toggleQuickNotification(){
+        quickNotificationEnabled=!quickNotificationEnabled;savePref("quick_notification",quickNotificationEnabled);
+        if(!quickNotificationEnabled){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(71);Toast.makeText(this,"Quick notification disabled",Toast.LENGTH_SHORT).show();return;}
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},42);return;}
+        postQuickNotification();
+    }
+    private void postQuickNotification(){
+        if(!quickNotificationEnabled)return;
+        NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+        if(Build.VERSION.SDK_INT>=26)nm.createNotificationChannel(new NotificationChannel("airpods_status","AirPods status",NotificationManager.IMPORTANCE_LOW));
+        Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,"airpods_status"):new Notification.Builder(this);
+        b.setSmallIcon(android.R.drawable.stat_sys_data_bluetooth).setContentTitle("AirPods Connect").setContentText(status.getText()).setOngoing(true);
+        nm.notify(71,b.build());
     }
     private LinearLayout batteryCard(String label,String icon,int which){
         LinearLayout c=card();c.setGravity(Gravity.CENTER);c.addView(text(icon,22,blue,true));gap(c,5);
@@ -201,6 +272,8 @@ public class MainActivity extends Activity {
             if(!n.toLowerCase(Locale.ROOT).contains("airpod"))return;
             status.setText(connected?"●  "+n+" connected":"AirPods disconnected");
             connectionHint.setText(connected?"Classic Bluetooth connection detected":"Open Bluetooth settings to reconnect");
+            if(connected){if(popupEnabled)showConnectionPopup(n);speak(n+" connected");}else speak(n+" disconnected");
+            if(quickNotificationEnabled)postQuickNotification();
             refreshPaired();
         }catch(SecurityException ignored){}
     }
@@ -340,6 +413,7 @@ public class MainActivity extends Activity {
     private void showBattery(int value){
         runOnUiThread(()->{
             battery.setText(value+"%");
+            if(lowBatteryEnabled&&value<=20)speak("Earbuds battery low, "+value+" percent");
             status.setText("BLE battery received");
             connectionHint.setText("One battery value received from device");
         });
@@ -352,10 +426,10 @@ public class MainActivity extends Activity {
             .setPositiveButton("OK",(d,w)->d.dismiss()).show();
     }
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){
-        super.onRequestPermissionsResult(r,p,g);if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
+        super.onRequestPermissionsResult(r,p,g);if(r==42){if(g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)postQuickNotification();else Toast.makeText(this,"Notification permission denied",Toast.LENGTH_SHORT).show();return;}if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
     }
     @Override protected void onDestroy(){
         super.onDestroy();
-        try{if(equalizer!=null)equalizer.release();if(scanner!=null&&permitted())scanner.stopScan(callback);if(activeGatt!=null)activeGatt.close();if(adapter!=null){if(a2dp!=null)adapter.closeProfileProxy(BluetoothProfile.A2DP,a2dp);if(headset!=null)adapter.closeProfileProxy(BluetoothProfile.HEADSET,headset);}}catch(Exception ignored){}
+        try{if(tts!=null){tts.stop();tts.shutdown();}if(equalizer!=null)equalizer.release();if(scanner!=null&&permitted())scanner.stopScan(callback);if(activeGatt!=null)activeGatt.close();if(adapter!=null){if(a2dp!=null)adapter.closeProfileProxy(BluetoothProfile.A2DP,a2dp);if(headset!=null)adapter.closeProfileProxy(BluetoothProfile.HEADSET,headset);}}catch(Exception ignored){}
     }
 }
