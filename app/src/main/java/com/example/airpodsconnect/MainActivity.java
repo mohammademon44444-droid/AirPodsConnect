@@ -177,7 +177,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         IntentFilter f=new IntentFilter();f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);f.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);f.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        try{registerReceiver(btReceiver,f);receiverRegistered=true;}catch(Exception ignored){}
+        try{if(Build.VERSION.SDK_INT>=33)registerReceiver(btReceiver,f,Context.RECEIVER_EXPORTED);else registerReceiver(btReceiver,f);receiverRegistered=true;}catch(Exception ignored){}
         if(adapter!=null)refreshPaired();
     }
     @Override protected void onPause(){super.onPause();if(receiverRegistered){try{unregisterReceiver(btReceiver);}catch(Exception ignored){}receiverRegistered=false;}}
@@ -202,11 +202,11 @@ public class MainActivity extends Activity {
         if(!permitted())return;
         try{
             String address=d.getAddress();if(!seen.add(address))return;
-            String name=d.getName();if(name==null||name.trim().isEmpty())name="Unknown BLE device";
+            String name=d.getName();if(name==null||name.trim().isEmpty())name="Unknown BLE device";final String deviceName=name;
             LinearLayout item=card();item.setOrientation(LinearLayout.HORIZONTAL);item.setGravity(Gravity.CENTER_VERTICAL);
             LinearLayout info=column();info.addView(text(name,13,Color.WHITE,true));info.addView(text(rssi+" dBm",10,muted,false));
             item.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-            Button read=new Button(this);read.setText("Read battery");read.setAllCaps(false);read.setTextColor(Color.WHITE);read.setBackground(shape(blue,12));read.setOnClickListener(v->connectGatt(d,name));
+            Button read=new Button(this);read.setText("Read battery");read.setAllCaps(false);read.setTextColor(Color.WHITE);read.setBackground(shape(blue,12));read.setOnClickListener(v->connectGatt(d,deviceName));
             item.addView(read,lp(112,42));LinearLayout.LayoutParams p=lp(-1,-2);p.bottomMargin=dp(7);devices.addView(item,p);
         }catch(SecurityException ignored){}
     }
