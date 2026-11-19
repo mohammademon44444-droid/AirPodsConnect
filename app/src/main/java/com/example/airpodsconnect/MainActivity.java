@@ -173,7 +173,7 @@ public class MainActivity extends Activity {
         root.addView(text("MORE FEATURES",13,Color.WHITE,true));gap(root,10);
         addFeatureRow(root,"⚙","Pop-up Settings","Connection popup",()->showPopupSettings(),"▤","Sound Settings","Equalizer controls",()->new android.app.AlertDialog.Builder(this).setTitle("Sound Settings").setMessage("Equalizer presets and band controls are available in the Audio Equalizer section above. Bluetooth audio effect support depends on your phone.").setPositiveButton("OK",null).show());
         addFeatureRow(root,"☝","Gesture Settings","Earbud touch controls",()->showGestureInfo(),"◖","Voice Broadcast","Connection & low battery",()->showVoiceSettings());
-        addFeatureRow(root,"◉","Auto Audio Ctrl","Connection monitoring",()->toggleAutoAudio(),"▦","Battery Widget","Battery at a glance",()->showBatteryWidget());
+        addFeatureRow(root,"◉","Audio Routing Info","Android audio routing",()->toggleAutoAudio(),"▦","Battery Details","Current battery readings",()->showBatteryWidget());
         addFeatureRow(root,"♧","Quick Notification","Live connection status",()->toggleQuickNotification(),"▣","Permission Settings","App permissions",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getPackageName()))));
     }
     private void addFeatureRow(LinearLayout root,String i1,String t1,String d1,Runnable a1,String i2,String t2,String d2,Runnable a2){
@@ -200,6 +200,7 @@ public class MainActivity extends Activity {
         new android.app.AlertDialog.Builder(this).setTitle("Voice Broadcast").setView(box).setPositiveButton("Save",(d,w)->{voiceEnabled=voice.isChecked();lowBatteryEnabled=low.isChecked();savePref("voice",voiceEnabled);savePref("low_battery",lowBatteryEnabled);if(voiceEnabled)speak("Voice broadcast enabled");}).setNegativeButton("Cancel",null).show();
     }
     private void speak(String message){if(ttsReady&&voiceEnabled)try{tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,"airpods_voice");}catch(Exception ignored){}}
+    private void speakLowBattery(String message){if(ttsReady&&lowBatteryEnabled)try{tts.speak(message,TextToSpeech.QUEUE_ADD,null,"airpods_low_battery");}catch(Exception ignored){}}
     private void toggleAutoAudio(){
         autoAudioEnabled=!autoAudioEnabled;savePref("auto_audio",autoAudioEnabled);
         new android.app.AlertDialog.Builder(this).setTitle("Auto Audio Control").setMessage(autoAudioEnabled?"Connection monitoring is enabled. Android still controls Bluetooth audio routing; this app cannot force-connect A2DP on standard Android.":"Connection monitoring is disabled.").setPositiveButton("OK",null).show();
@@ -413,17 +414,26 @@ public class MainActivity extends Activity {
     private void showBattery(int value){
         runOnUiThread(()->{
             battery.setText(value+"%");
-            if(lowBatteryEnabled&&value<=20)speak("Earbuds battery low, "+value+" percent");
+            if(lowBatteryEnabled&&value<=20)speakLowBattery("Earbuds battery low, "+value+" percent");
             status.setText("BLE battery received");
             connectionHint.setText("One battery value received from device");
         });
     }
     private void showConnectionPopup(String name){
         if(isFinishing()||isDestroyed())return;
-        new android.app.AlertDialog.Builder(this)
-            .setTitle("AirPods connected")
-            .setMessage(name+"\\n\\nBluetooth audio connection detected. Battery details will appear when the earbuds provide them.")
-            .setPositiveButton("OK",(d,w)->d.dismiss()).show();
+        if(!dynamicPopup){
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("AirPods connected")
+                .setMessage(name+"\\n\\nBluetooth audio connection detected. Battery details will appear when the earbuds provide them.")
+                .setPositiveButton("OK",(d,w)->d.dismiss()).show();
+            return;
+        }
+        LinearLayout content=column();content.setPadding(dp(22),dp(20),dp(22),dp(12));content.setGravity(Gravity.CENTER);
+        TextView icon=text("🎧",54,Color.WHITE,false);content.addView(icon);gap(content,10);
+        content.addView(text("AIRPODS CONNECTED",17,Color.WHITE,true));gap(content,6);
+        content.addView(text(name,13,blue,true));gap(content,8);
+        TextView detail=text("Bluetooth audio connection detected",11,muted,false);detail.setGravity(Gravity.CENTER);content.addView(detail);
+        new android.app.AlertDialog.Builder(this).setView(content).setPositiveButton("GOT IT",null).show();
     }
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){
         super.onRequestPermissionsResult(r,p,g);if(r==42){if(g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)postQuickNotification();else Toast.makeText(this,"Notification permission denied",Toast.LENGTH_SHORT).show();return;}if(r==REQ){boolean ok=true;for(int x:g)if(x!=PackageManager.PERMISSION_GRANTED)ok=false;if(ok){if(adapter!=null){adapter.getProfileProxy(this,profileListener,BluetoothProfile.A2DP);adapter.getProfileProxy(this,profileListener,BluetoothProfile.HEADSET);}refreshPaired();startScan();}else status.setText("Bluetooth permission required");}
