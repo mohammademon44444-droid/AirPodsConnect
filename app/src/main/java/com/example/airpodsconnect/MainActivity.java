@@ -128,7 +128,7 @@ public class MainActivity extends Activity {
             Button item=new Button(this); item.setAllCaps(false);
             item.setGravity(Gravity.CENTER_VERTICAL);
             item.setText(name+"  •  "+rssi+" dBm\n"+address);
-            item.setOnClickListener(v -> connect(d,name));
+            item.setOnClickListener(v -> connect(d,deviceName));
             devices.addView(item,new LinearLayout.LayoutParams(-1,dp(68)));
         } catch (SecurityException ignored) {}
     }
